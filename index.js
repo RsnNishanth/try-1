@@ -7,20 +7,53 @@ const prisma = new PrismaClient();
 // Middleware to parse JSON
 app.use(express.json());
 
-// Test route
-app.post("/newuser", async(req, res) => {
-  const data=req.body;
-  const {username,password,name,email,phoneNumber}=data;
-  const Newuser=await prisma.userDetails.create({
-    data:{
-      username,
-      password,
-      name,
-      email,
-      phoneNumber
+// ✅ User registration route
+app.post("/newuser", async (req, res) => {
+  try {
+    const { username, password, name, email, phoneNumber } = req.body;
+
+    // Basic validation
+    if (!username || !password || !email || !phoneNumber) {
+      return res.status(400).json({ error: "username, password, email, and phoneNumber are required" });
     }
-  });
-  res.send({message:"details send"})
+
+    // 🔍 Check if any existing user has same username, email, or phoneNumber
+    const existingUser = await prisma.userDetails.findFirst({
+      where: {
+        OR: [
+          { username },
+          { email },
+          { phoneNumber },
+        ],
+      },
+    });
+
+    if (existingUser) {
+      let conflictField = existingUser.username === username
+        ? "Username"
+        : existingUser.email === email
+        ? "Email"
+        : "Phone number";
+
+      return res.status(400).json({ error: `${conflictField} already exists` });
+    }
+
+    // ✅ Create user
+    const newUser = await prisma.userDetails.create({
+      data: {
+        username,
+        password, // ⚠️ should be hashed in production!
+        name,
+        email,
+        phoneNumber,
+      },
+    });
+
+    res.status(201).json({ message: "User created successfully", user: newUser });
+  } catch (err) {
+    console.error("❌ Error creating user:", err);
+    res.status(500).json({ error: "Internal server error", details: err.message });
+  }
 });
 
 // Start server
