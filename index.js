@@ -94,6 +94,20 @@ app.post("/newproducts", async (req, res) => {
   }
 });
 
+app.get("/products/:category", async (req, res) => {
+  try {
+    const { category } = req.params;
+    const data = await prisma.product.findMany({
+      where: { category }
+    });
+    res.json(data);
+  } catch (error) {
+    console.error("Error fetching products:", error);
+    res.status(500).json({ error: "Failed to fetch products" });
+  }
+});
+
+
 // Start server
 app.listen(3000, () => {
   console.log("🚀 Server is Running at http://localhost:3000");
