@@ -63,6 +63,37 @@ app.post("/newuser", async (req, res) => {
   }
 });
 
+
+app.get("/products", async (req, res) => {
+  try {
+    const data = await prisma.product.findMany();
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch products" });
+  }
+});
+
+// POST new products (bulk insert)
+app.post("/newproducts", async (req, res) => {
+  try {
+    const { data } = req.body; // expecting { "data": [ ... ] }
+
+    if (!data || !Array.isArray(data)) {
+      return res.status(400).json({ error: "Request body must include { data: [...] }" });
+    }
+
+    const created = await prisma.product.createMany({
+      data: data,
+      skipDuplicates: true, // avoids inserting duplicates
+    });
+
+    res.json({ message: "Products created", count: created.count });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to create products" });
+  }
+});
+
 // Start server
 app.listen(3000, () => {
   console.log("🚀 Server is Running at http://localhost:3000");
