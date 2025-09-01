@@ -112,7 +112,9 @@ app.post("/login", async (req, res) => {
   const { username, password } = req.body;
 
   try {
-    // ✅ Check if user exists in UserDetails table
+    // 🔍 Debug: log available Prisma models
+    console.log("Available Prisma models:", Object.keys(prisma));
+
     const user = await prisma.userDetails.findUnique({
       where: { username },
     });
@@ -121,7 +123,6 @@ app.post("/login", async (req, res) => {
       return res.status(401).json({ message: "Invalid username" });
     }
 
-    // ✅ Simple password check (no hashing)
     if (user.password !== password) {
       return res.status(401).json({ message: "Invalid password" });
     }
