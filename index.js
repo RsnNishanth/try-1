@@ -30,17 +30,23 @@ app.use(session({
 }));
 
 // ✅ User registration route
+// ✅ User registration route
 app.post("/newuser", async (req, res) => {
   try {
-    const { username, password, name, email, phoneNumber } = req.body;
-    const hashedPassword=await bcrypt.hash(password,10);
+    let { username, password, name, email, phoneNumber } = req.body;
+
+    // Trim inputs
+    username = username?.trim();
+    password = password?.trim();
+    email = email?.trim();
+    phoneNumber = phoneNumber?.trim();
 
     // Basic validation
     if (!username || !password || !email || !phoneNumber) {
       return res.status(400).json({ error: "username, password, email, and phoneNumber are required" });
     }
 
-    // 🔍 Check if any existing user has same username, email, or phoneNumber
+    // Check if any existing user has same username, email, or phoneNumber
     const existingUser = await prisma.userDetails.findFirst({
       where: {
         OR: [
@@ -61,11 +67,14 @@ app.post("/newuser", async (req, res) => {
       return res.status(400).json({ error: `${conflictField} already exists` });
     }
 
-    // ✅ Create user
+    // Hash the password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create user
     const newUser = await prisma.userDetails.create({
       data: {
         username,
-        password:hashedPassword, // ⚠️ should be hashed in production!
+        password: hashedPassword,
         name,
         email,
         phoneNumber,
@@ -78,6 +87,7 @@ app.post("/newuser", async (req, res) => {
     res.status(500).json({ error: "Internal server error", details: err.message });
   }
 });
+
 
 //Products
 app.get("/products", async (req, res) => {
@@ -125,29 +135,36 @@ app.get("/products/:category", async (req, res) => {
 });
 
 // ✅ Login endpoint
+// ✅ Login endpoint
 app.post("/login", async (req, res) => {
-  const { username, password } = req.body;
-  console.log("🔍 Login attempt:", username);
-
   try {
+    let { username, password } = req.body;
+
+    // Trim inputs
+    username = username?.trim();
+    password = password?.trim();
+
+    if (!username || !password) {
+      return res.status(400).json({ message: "username and password are required" });
+    }
+
     const user = await prisma.userDetails.findUnique({
       where: { username },
     });
-    console.log("📌 Found user:", user);
 
     if (!user) {
       return res.status(401).json({ message: "Invalid username" });
     }
 
+    // Compare hashed password
     const isValid = await bcrypt.compare(password, user.password);
-    console.log("✅ Password match:", isValid);
 
     if (!isValid) {
       return res.status(401).json({ message: "Invalid password" });
     }
 
+    // Create session
     req.session.userId = user.id;
-    console.log("🎉 Session created for:", user.id);
 
     res.json({ message: "Login successful", userId: user.id });
   } catch (err) {
@@ -155,6 +172,7 @@ app.post("/login", async (req, res) => {
     res.status(500).json({ message: "Server error", details: err.message });
   }
 });
+
 
 
 //AddingCart
