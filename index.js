@@ -11,24 +11,26 @@ const { transporter } = require("./utils/mailer");
 const isProduction = process.env.NODE_ENV === "production";
 
 app.use(cors({
-  origin: "http://localhost:5173",
-  methods: ["GET", "POST", "PUT", "DELETE"],
+  origin: "http://localhost:5173", // frontend URL
   credentials: true
 }));
+
 
 app.use(express.json());
 
 // -------------------- SESSION --------------------
+
 app.use(session({
   secret: "your_secret_key",
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: isProduction,       // ✅ works on HTTPS (Render), false on localhost
-    sameSite: isProduction ? "none" : "lax",  // ✅ cross-origin cookies
+    secure: isProduction,       // ✅ HTTPS required in production
+    sameSite: isProduction ? "none" : "lax",  // ✅ cross-origin
     httpOnly: true
   }
 }));
+
 
 // ==================== USER ROUTES ====================
 app.post("/newuser", async (req, res) => {
