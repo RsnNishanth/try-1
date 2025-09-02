@@ -11,8 +11,9 @@ const { transporter } = require("./utils/mailer");
 const isProduction = process.env.NODE_ENV === "production";
 
 app.use(cors({
-  origin: "http://localhost:5173", // frontend URL
-  credentials: true
+  origin: ["http://localhost:5173"], // your frontend URL
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  credentials: true // ✅ required to send cookies
 }));
 
 
@@ -25,8 +26,8 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: isProduction,       // ✅ HTTPS required in production
-    sameSite: isProduction ? "none" : "lax",  // ✅ cross-origin
+    secure: isProduction,       // ✅ HTTPS only in production
+    sameSite: isProduction ? "none" : "lax",  // ✅ cross-origin for production, lax for localhost
     httpOnly: true
   }
 }));
