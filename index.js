@@ -5,10 +5,11 @@ const cors = require("cors");
 
 const app = express();
 const prisma = new PrismaClient();
-
 const { transporter } = require("./utils/mailer");
 
-// Middleware
+// -------------------- MIDDLEWARE --------------------
+const isProduction = process.env.NODE_ENV === "production";
+
 app.use(cors({
   origin: "http://localhost:5173",
   methods: ["GET", "POST", "PUT", "DELETE"],
@@ -17,16 +18,19 @@ app.use(cors({
 
 app.use(express.json());
 
+// -------------------- SESSION --------------------
 app.use(session({
   secret: "your_secret_key",
   resave: false,
   saveUninitialized: false,
-  cookie: { secure: false }
+  cookie: {
+    secure: isProduction,       // ✅ works on HTTPS (Render), false on localhost
+    sameSite: isProduction ? "none" : "lax",  // ✅ cross-origin cookies
+    httpOnly: true
+  }
 }));
 
 // ==================== USER ROUTES ====================
-
-// Register new user (plain password)
 app.post("/newuser", async (req, res) => {
   try {
     let { username, password, name, email, phoneNumber } = req.body;
@@ -66,7 +70,6 @@ app.post("/newuser", async (req, res) => {
   }
 });
 
-// Login (plain password comparison)
 app.post("/login", async (req, res) => {
   try {
     let { username, password } = req.body;
@@ -90,7 +93,6 @@ app.post("/login", async (req, res) => {
   }
 });
 
-// Logout
 app.post("/logout", (req, res) => {
   req.session.destroy(err => {
     if (err) return res.status(500).json({ message: "Logout failed" });
@@ -100,8 +102,6 @@ app.post("/logout", (req, res) => {
 });
 
 // ==================== PRODUCT ROUTES ====================
-
-// Get all products
 app.get("/products", async (req, res) => {
   try {
     const data = await prisma.product.findMany();
@@ -112,7 +112,6 @@ app.get("/products", async (req, res) => {
   }
 });
 
-// Get products by category
 app.get("/products/:category", async (req, res) => {
   try {
     const { category } = req.params;
@@ -124,7 +123,6 @@ app.get("/products/:category", async (req, res) => {
   }
 });
 
-// Add new products (bulk insert)
 app.post("/newproducts", async (req, res) => {
   try {
     const { data } = req.body;
@@ -139,13 +137,10 @@ app.post("/newproducts", async (req, res) => {
 });
 
 // ==================== CART ROUTES ====================
-
-// Add item to cart
 app.post("/cartpost", async (req, res) => {
   if (!req.session.userId) return res.status(401).json({ error: "Not logged in" });
 
   const { productId, quantity } = req.body;
-
   try {
     const cartItem = await prisma.cart.create({
       data: { productId, quantity, userId: req.session.userId },
@@ -158,7 +153,6 @@ app.post("/cartpost", async (req, res) => {
   }
 });
 
-// Get user cart
 app.get("/cart", async (req, res) => {
   if (!req.session.userId) return res.status(401).json({ error: "Not logged in" });
 
@@ -174,12 +168,10 @@ app.get("/cart", async (req, res) => {
   }
 });
 
-// Delete cart item
 app.delete("/cart/:id", async (req, res) => {
   if (!req.session.userId) return res.status(401).json({ error: "Not logged in" });
 
   const cartId = parseInt(req.params.id, 10);
-
   try {
     const cartItem = await prisma.cart.findUnique({ where: { id: cartId } });
     if (!cartItem || cartItem.userId !== req.session.userId) return res.status(404).json({ error: "Cart item not found" });
@@ -192,39 +184,8 @@ app.delete("/cart/:id", async (req, res) => {
   }
 });
 
-// Send cart to email & clear
-app.post("/send-cart-email", async (req, res) => {
-  if (!req.session.userId) return res.status(401).json({ error: "Not logged in" });
-
-  try {
-    const user = await prisma.userDetails.findUnique({ where: { id: req.session.userId } });
-    if (!user) return res.status(404).json({ error: "User not found" });
-
-    const cartItems = await prisma.cart.findMany({
-      where: { userId: req.session.userId },
-      include: { product: true }
-    });
-
-    if (!cartItems.length) return res.status(404).json({ error: "Cart is empty" });
-
-    const cartContent = cartItems.map(item => `${item.product.name} - ${item.quantity} x $${item.product.price}`).join("\n");
-
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: user.email,
-      subject: "Your Cart Details - RSN TeleMart",
-      text: `Hello ${user.username},\n\nHere are your cart details:\n\n${cartContent}\n\nThank you for shopping with RSN TeleMart!`,
-    });
-
-    await prisma.cart.deleteMany({ where: { userId: req.session.userId } });
-    res.json({ message: "Cart sent to email and cleared successfully" });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error", details: err.message });
-  }
-});
-
 // ==================== START SERVER ====================
-app.listen(3000, () => {
-  console.log("🚀 Server running at http://localhost:3000");
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`🚀 Server running at http://localhost:${PORT}`);
 });
