@@ -8,25 +8,25 @@ const { transporter } = require("./utils/mailer");
 const app = express();
 const prisma = new PrismaClient();
 
-// -------------------- MIDDLEWARE --------------------
 const isProduction = process.env.NODE_ENV === "production";
 
+// ---------- MIDDLEWARE ----------
 app.use(cors({
-  origin: "http://localhost:5173", // frontend
+  origin: "http://localhost:5173", // frontend URL
   methods: ["GET", "POST", "PUT", "DELETE"],
-  credentials: true
+  credentials: true // ✅ allow cookies
 }));
 
 app.use(express.json());
 
-// -------------------- SESSION --------------------
+// ---------- SESSION ----------
 app.use(session({
   secret: process.env.SESSION_SECRET || "supersecretkey",
   resave: false,
   saveUninitialized: true,
   cookie: {
-    secure: true,      // HTTPS on Render
-    sameSite: "none",  // cross-origin cookies
+    secure: isProduction,               // ✅ HTTPS only in production
+    sameSite: isProduction ? "none" : "lax",
     httpOnly: true,
     maxAge: 24 * 60 * 60 * 1000 // 1 day
   }
@@ -35,7 +35,7 @@ app.use(session({
 // ==================== USER ROUTES ====================
 app.post("/newuser", async (req, res) => {
   try {
-    const { username, password, name, email, phoneNumber } = req.body;
+    let { username, password, name, email, phoneNumber } = req.body;
 
     if (!username || !password || !email || !phoneNumber) {
       return res.status(400).json({ error: "All fields are required" });
@@ -55,7 +55,7 @@ app.post("/newuser", async (req, res) => {
     }
 
     const newUser = await prisma.userDetails.create({
-      data: { username, password, name, email, phoneNumber } // ✅ plaintext password
+      data: { username, password, name, email, phoneNumber }
     });
 
     res.status(201).json({ message: "User created successfully", user: newUser });
@@ -68,12 +68,10 @@ app.post("/newuser", async (req, res) => {
 app.post("/login", async (req, res) => {
   try {
     const { username, password } = req.body;
-
     if (!username || !password) return res.status(400).json({ message: "Username & password required" });
 
     const user = await prisma.userDetails.findUnique({ where: { username } });
     if (!user) return res.status(401).json({ message: "Invalid username" });
-
     if (password !== user.password) return res.status(401).json({ message: "Invalid password" });
 
     req.session.userId = user.id;
@@ -87,7 +85,7 @@ app.post("/login", async (req, res) => {
 app.post("/logout", (req, res) => {
   req.session.destroy(err => {
     if (err) return res.status(500).json({ message: "Logout failed" });
-    res.clearCookie("connect.sid", { path: "/", sameSite: "none", secure: true });
+    res.clearCookie("connect.sid", { path: "/", sameSite: "none", secure: isProduction });
     res.json({ message: "Logged out successfully" });
   });
 });
@@ -207,6 +205,4 @@ app.post("/cart/send-email", async (req, res) => {
 
 // ==================== START SERVER ====================
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`🚀 Server running at http://localhost:${PORT}`);
-});
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
