@@ -13,26 +13,34 @@ const isProduction = process.env.NODE_ENV === "production";
 // ---------- MIDDLEWARE ----------
 app.set("trust proxy", 1); // ✅ needed for secure cookies on Render/Vercel
 
-app.use(cors({
+// ✅ Allow CORS
+const corsOptions = {
   origin: ["http://localhost:5173", "https://try-1fe.vercel.app"],
   methods: ["GET", "POST", "PUT", "DELETE"],
   credentials: true, // ✅ allow cookies
-}));
+};
+app.use(cors(corsOptions));
+
+// ✅ Handle CORS preflight explicitly (important on Render)
+app.options("*", cors(corsOptions));
+
 app.use(express.json());
 
 // ✅ Session middleware must be before routes
-app.use(session({
-  name: "connect.sid",
-  secret: process.env.SESSION_SECRET || "supersecretkey",
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: isProduction,                // ✅ only over HTTPS in prod
-    httpOnly: true,
-    sameSite: isProduction ? "none" : "lax",
-    maxAge: 24 * 60 * 60 * 1000,         // 1 day
-  },
-}));
+app.use(
+  session({
+    name: "connect.sid",
+    secret: process.env.SESSION_SECRET || "supersecretkey",
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: isProduction,                // ✅ only over HTTPS in prod
+      httpOnly: true,
+      sameSite: isProduction ? "none" : "lax",
+      maxAge: 24 * 60 * 60 * 1000,         // 1 day
+    },
+  })
+);
 
 // ---------- HELPERS ----------
 function isAuth(req, res, next) {
@@ -146,7 +154,10 @@ app.post("/newproducts", async (req, res) => {
       return res.status(400).json({ error: "Data must be an array" });
     }
 
-    const created = await prisma.product.createMany({ data, skipDuplicates: true });
+    const created = await prisma.product.createMany({
+      data,
+      skipDuplicates: true,
+    });
     res.json({ message: "Products created", count: created.count });
   } catch (err) {
     console.error(err);
