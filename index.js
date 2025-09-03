@@ -12,25 +12,29 @@ const isProduction = process.env.NODE_ENV === "production";
 
 // ---------- MIDDLEWARE ----------
 app.use(cors({
-  origin: "http://localhost:5173", // frontend URL
+  origin: ["http://localhost:5173"], // your local frontend
   methods: ["GET", "POST", "PUT", "DELETE"],
   credentials: true // ✅ allow cookies
 }));
 
+
 app.use(express.json());
 
 // ---------- SESSION ----------
+
+
 app.use(session({
   secret: process.env.SESSION_SECRET || "supersecretkey",
   resave: false,
   saveUninitialized: true,
   cookie: {
-    secure: true,      // ✅ must be true for HTTPS
-    sameSite: "none",  // ✅ cross-origin cookies
+    secure: isProduction,      // ✅ true on Render, false locally
+    sameSite: isProduction ? "none" : "lax", // ✅ cross-origin allowed on Render
     httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000
+    maxAge: 24 * 60 * 60 * 1000,
   }
 }));
+
 
 
 // ==================== USER ROUTES ====================
