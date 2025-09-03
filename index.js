@@ -11,9 +11,8 @@ const prisma = new PrismaClient();
 // -------------------- MIDDLEWARE --------------------
 const isProduction = process.env.NODE_ENV === "production";
 
-// ✅ CORS for local frontend
 app.use(cors({
-  origin: "http://localhost:5173", // your local frontend
+  origin: "http://localhost:5173", // frontend
   methods: ["GET", "POST", "PUT", "DELETE"],
   credentials: true
 }));
@@ -26,8 +25,8 @@ app.use(session({
   resave: false,
   saveUninitialized: true,
   cookie: {
-    secure: true,      // ✅ HTTPS on Render
-    sameSite: "none",  // ✅ cross-origin cookies
+    secure: true,      // HTTPS on Render
+    sameSite: "none",  // cross-origin cookies
     httpOnly: true,
     maxAge: 24 * 60 * 60 * 1000 // 1 day
   }
@@ -36,7 +35,7 @@ app.use(session({
 // ==================== USER ROUTES ====================
 app.post("/newuser", async (req, res) => {
   try {
-    let { username, password, name, email, phoneNumber } = req.body;
+    const { username, password, name, email, phoneNumber } = req.body;
 
     if (!username || !password || !email || !phoneNumber) {
       return res.status(400).json({ error: "All fields are required" });
@@ -56,7 +55,7 @@ app.post("/newuser", async (req, res) => {
     }
 
     const newUser = await prisma.userDetails.create({
-      data: { username, password, name, email, phoneNumber }
+      data: { username, password, name, email, phoneNumber } // ✅ plaintext password
     });
 
     res.status(201).json({ message: "User created successfully", user: newUser });
