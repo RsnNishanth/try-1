@@ -11,6 +11,8 @@ const prisma = new PrismaClient();
 const isProduction = process.env.NODE_ENV === "production";
 
 // ---------- MIDDLEWARE ----------
+app.set("trust proxy", 1); // ✅ needed for secure cookies on Render/Vercel
+
 app.use(cors({
   origin: ["http://localhost:5173", "https://try-1fe.vercel.app"],
   methods: ["GET", "POST", "PUT", "DELETE"],
@@ -20,17 +22,23 @@ app.use(express.json());
 
 // ✅ Session middleware must be before routes
 app.use(session({
-  name: "connect.sid", // ✅ standard cookie name
+  name: "connect.sid",
   secret: process.env.SESSION_SECRET || "supersecretkey",
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: isProduction,        // ✅ true only when deployed on HTTPS
+    secure: isProduction,                // ✅ only over HTTPS in prod
     httpOnly: true,
-    sameSite: isProduction ? "none" : "lax", // ✅ cross-site cookie support
-    maxAge: 24 * 60 * 60 * 1000, // 1 day
+    sameSite: isProduction ? "none" : "lax",
+    maxAge: 24 * 60 * 60 * 1000,         // 1 day
   },
 }));
+
+// ---------- HELPERS ----------
+function isAuth(req, res, next) {
+  if (req.session && req.session.userId) return next();
+  return res.status(401).json({ error: "Not logged in" });
+}
 
 // ==================== USER ROUTES ====================
 app.post("/newuser", async (req, res) => {
@@ -80,25 +88,14 @@ app.post("/login", async (req, res) => {
       return res.status(401).json({ message: "Invalid password" });
     }
 
-    // ✅ Save session only after password check
+    // ✅ Save session after password check
     req.session.userId = user.id;
-
     req.session.save((err) => {
       if (err) {
         console.error("❌ Session save error:", err);
         return res.status(500).json({ message: "Login failed" });
       }
-
       console.log("✅ Session created:", req.session);
-
-      // ✅ explicitly send cookie (important for Render + Vercel combo)
-      res.cookie("connect.sid", req.sessionID, {
-        httpOnly: true,
-        secure: isProduction,
-        sameSite: isProduction ? "none" : "lax",
-        maxAge: 24 * 60 * 60 * 1000,
-      });
-
       res.json({ message: "Login successful", userId: user.id });
     });
   } catch (err) {
@@ -158,9 +155,7 @@ app.post("/newproducts", async (req, res) => {
 });
 
 // ==================== CART ROUTES ====================
-app.post("/cartpost", async (req, res) => {
-  if (!req.session.userId) return res.status(401).json({ error: "Not logged in" });
-
+app.post("/cartpost", isAuth, async (req, res) => {
   const { productId, quantity } = req.body;
   try {
     const cartItem = await prisma.cart.create({
@@ -174,9 +169,7 @@ app.post("/cartpost", async (req, res) => {
   }
 });
 
-app.get("/cart", async (req, res) => {
-  if (!req.session.userId) return res.status(401).json({ error: "Not logged in" });
-
+app.get("/cart", isAuth, async (req, res) => {
   try {
     const cart = await prisma.cart.findMany({
       where: { userId: req.session.userId },
@@ -189,9 +182,7 @@ app.get("/cart", async (req, res) => {
   }
 });
 
-app.delete("/cart/:id", async (req, res) => {
-  if (!req.session.userId) return res.status(401).json({ error: "Not logged in" });
-
+app.delete("/cart/:id", isAuth, async (req, res) => {
   const cartId = parseInt(req.params.id, 10);
   try {
     const cartItem = await prisma.cart.findUnique({ where: { id: cartId } });
@@ -208,9 +199,7 @@ app.delete("/cart/:id", async (req, res) => {
 });
 
 // ==================== SEND CART EMAIL ====================
-app.post("/cart/send-email", async (req, res) => {
-  if (!req.session.userId) return res.status(401).json({ error: "Not logged in" });
-
+app.post("/cart/send-email", isAuth, async (req, res) => {
   try {
     const cartItems = await prisma.cart.findMany({
       where: { userId: req.session.userId },
