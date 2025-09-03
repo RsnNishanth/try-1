@@ -16,11 +16,12 @@ app.set("trust proxy", 1); // ✅ required on Vercel/Render
 // ✅ Allow CORS
 const corsOptions = {
   origin: ["http://localhost:5173", "https://try-1fe.vercel.app"],
-  methods: ["GET", "POST", "PUT", "DELETE"],
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   credentials: true,
 };
-// ✅ Preflight
-app.options("*", cors(corsOptions));
+
+app.use(cors(corsOptions));          // enable CORS for all
+app.options(/.*/, cors(corsOptions)); 
 app.use(express.json());
 
 // ✅ Sessions
