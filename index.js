@@ -1,56 +1,49 @@
+require("dotenv").config();
 const express = require("express");
 const session = require("express-session");
 const { PrismaClient } = require("@prisma/client");
 const cors = require("cors");
+const { transporter } = require("./utils/mailer");
 
 const app = express();
 const prisma = new PrismaClient();
-const { transporter } = require("./utils/mailer");
 
 // -------------------- MIDDLEWARE --------------------
 const isProduction = process.env.NODE_ENV === "production";
 
+// ✅ CORS for local frontend
 app.use(cors({
-  origin: ["http://localhost:5173"], // your frontend URL
+  origin: "http://localhost:5173", // your local frontend
   methods: ["GET", "POST", "PUT", "DELETE"],
-  credentials: true // ✅ required to send cookies
+  credentials: true
 }));
-
 
 app.use(express.json());
 
 // -------------------- SESSION --------------------
-
 app.use(session({
-  secret: "your_secret_key",
+  secret: process.env.SESSION_SECRET || "supersecretkey",
   resave: false,
-  saveUninitialized: false,
+  saveUninitialized: true,
   cookie: {
-    secure: isProduction,       // ✅ HTTPS only in production
-    sameSite: isProduction ? "none" : "lax",  // ✅ cross-origin for production, lax for localhost
-    httpOnly: true
+    secure: true,      // ✅ HTTPS on Render
+    sameSite: "none",  // ✅ cross-origin cookies
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000 // 1 day
   }
 }));
-
 
 // ==================== USER ROUTES ====================
 app.post("/newuser", async (req, res) => {
   try {
     let { username, password, name, email, phoneNumber } = req.body;
 
-    username = username?.trim();
-    password = password?.trim();
-    email = email?.trim();
-    phoneNumber = phoneNumber?.trim();
-
     if (!username || !password || !email || !phoneNumber) {
       return res.status(400).json({ error: "All fields are required" });
     }
 
     const existingUser = await prisma.userDetails.findFirst({
-      where: {
-        OR: [{ username }, { email }, { phoneNumber }]
-      }
+      where: { OR: [{ username }, { email }, { phoneNumber }] }
     });
 
     if (existingUser) {
@@ -69,19 +62,15 @@ app.post("/newuser", async (req, res) => {
     res.status(201).json({ message: "User created successfully", user: newUser });
   } catch (err) {
     console.error("❌ Error creating user:", err);
-    res.status(500).json({ error: "Internal server error", details: err.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
 app.post("/login", async (req, res) => {
   try {
-    let { username, password } = req.body;
-    username = username?.trim();
-    password = password?.trim();
+    const { username, password } = req.body;
 
-    if (!username || !password) {
-      return res.status(400).json({ message: "username and password required" });
-    }
+    if (!username || !password) return res.status(400).json({ message: "Username & password required" });
 
     const user = await prisma.userDetails.findUnique({ where: { username } });
     if (!user) return res.status(401).json({ message: "Invalid username" });
@@ -92,14 +81,14 @@ app.post("/login", async (req, res) => {
     res.json({ message: "Login successful", userId: user.id });
   } catch (err) {
     console.error("❌ Login error:", err);
-    res.status(500).json({ message: "Server error", details: err.message });
+    res.status(500).json({ message: "Server error" });
   }
 });
 
 app.post("/logout", (req, res) => {
   req.session.destroy(err => {
     if (err) return res.status(500).json({ message: "Logout failed" });
-    res.clearCookie("connect.sid");
+    res.clearCookie("connect.sid", { path: "/", sameSite: "none", secure: true });
     res.json({ message: "Logged out successfully" });
   });
 });
@@ -129,7 +118,7 @@ app.get("/products/:category", async (req, res) => {
 app.post("/newproducts", async (req, res) => {
   try {
     const { data } = req.body;
-    if (!data || !Array.isArray(data)) return res.status(400).json({ error: "data must be an array" });
+    if (!data || !Array.isArray(data)) return res.status(400).json({ error: "Data must be an array" });
 
     const created = await prisma.product.createMany({ data, skipDuplicates: true });
     res.json({ message: "Products created", count: created.count });
@@ -152,7 +141,7 @@ app.post("/cartpost", async (req, res) => {
     res.json(cartItem);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Server error", details: err.message });
+    res.status(500).json({ error: "Server error" });
   }
 });
 
@@ -167,7 +156,7 @@ app.get("/cart", async (req, res) => {
     res.json(cart);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Server error", details: err.message });
+    res.status(500).json({ error: "Server error" });
   }
 });
 
@@ -183,7 +172,37 @@ app.delete("/cart/:id", async (req, res) => {
     res.json({ message: "Cart item deleted successfully" });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Server error", details: err.message });
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// ==================== SEND CART EMAIL ====================
+app.post("/cart/send-email", async (req, res) => {
+  if (!req.session.userId) return res.status(401).json({ error: "Not logged in" });
+
+  try {
+    const cartItems = await prisma.cart.findMany({
+      where: { userId: req.session.userId },
+      include: { product: true }
+    });
+
+    if (cartItems.length === 0) return res.status(400).json({ error: "Cart is empty" });
+
+    const user = await prisma.userDetails.findUnique({ where: { id: req.session.userId } });
+
+    const productList = cartItems.map(item => `- ${item.product.title} (${item.quantity})`).join("\n");
+
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: user.email,
+      subject: "Your Cart Order",
+      text: `Hello ${user.name},\n\nYour cart contains:\n${productList}\n\nThank you!`
+    });
+
+    res.json({ message: "Cart email sent" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to send email" });
   }
 });
 
