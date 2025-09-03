@@ -244,7 +244,7 @@ app.post("/cart/send-email", isAuth, async (req, res) => {
       return res.status(400).json({ error: "Cart is empty" });
     }
 
-    // Build email content
+    // Build cart summary
     const cartSummary = cartItems
       .map(
         (item) =>
@@ -252,15 +252,29 @@ app.post("/cart/send-email", isAuth, async (req, res) => {
       )
       .join("\n");
 
-    const mailOptions = {
+    // Debug log (don’t expose real password!)
+    console.log("📧 EMAIL_USER:", process.env.EMAIL_USER);
+    console.log("📧 EMAIL_PASS exists:", !!process.env.EMAIL_PASS);
+
+    // Email to customer
+    const customerMail = {
       from: process.env.EMAIL_USER,
-      to: user.email, // send to customer
+      to: user.email,
       subject: "🛒 Order Confirmation",
       text: `Hello ${user.name},\n\nThank you for your order!\n\nYour cart:\n${cartSummary}\n\nWe will contact you soon.`,
     };
 
-    // Send email
-    await transporter.sendMail(mailOptions);
+    // Email to admin
+    const adminMail = {
+      from: process.env.EMAIL_USER,
+      to: process.env.EMAIL_USER,
+      subject: `📦 New Order from ${user.name}`,
+      text: `Customer: ${user.name}\nEmail: ${user.email}\nPhone: ${user.phoneNumber}\n\nCart:\n${cartSummary}`,
+    };
+
+    // Send both mails
+    await transporter.sendMail(customerMail);
+    await transporter.sendMail(adminMail);
 
     res.json({ message: "Order email sent successfully" });
   } catch (err) {
@@ -268,6 +282,7 @@ app.post("/cart/send-email", isAuth, async (req, res) => {
     res.status(500).json({ error: "Failed to send email" });
   }
 });
+
 
 
 // ==================== START SERVER ====================
