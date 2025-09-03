@@ -11,22 +11,21 @@ const prisma = new PrismaClient();
 const isProduction = process.env.NODE_ENV === "production";
 
 // ---------- MIDDLEWARE ----------
-app.set("trust proxy", 1); // ✅ needed for secure cookies on Render/Vercel
+app.set("trust proxy", 1); // ✅ required on Vercel/Render
 
 // ✅ Allow CORS
 const corsOptions = {
   origin: ["http://localhost:5173", "https://try-1fe.vercel.app"],
   methods: ["GET", "POST", "PUT", "DELETE"],
-  credentials: true, // ✅ allow cookies
+  credentials: true,
 };
 app.use(cors(corsOptions));
 
-// ✅ Handle preflight for all routes (Express v5 safe)
-app.options(cors(corsOptions));
-
+// ✅ Preflight
+app.options("*", cors(corsOptions));
 app.use(express.json());
 
-// ✅ Session middleware must be before routes
+// ✅ Sessions
 app.use(
   session({
     name: "connect.sid",
@@ -34,16 +33,17 @@ app.use(
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: isProduction,                // ✅ only over HTTPS in prod
+      secure: isProduction, // only HTTPS in prod
       httpOnly: true,
       sameSite: isProduction ? "none" : "lax",
-      maxAge: 24 * 60 * 60 * 1000,         // 1 day
+      maxAge: 24 * 60 * 60 * 1000,
     },
   })
 );
 
 // ---------- HELPERS ----------
 function isAuth(req, res, next) {
+  console.log("🔍 Checking session in isAuth:", req.session);
   if (req.session && req.session.userId) return next();
   return res.status(401).json({ error: "Not logged in" });
 }
@@ -103,7 +103,17 @@ app.post("/login", async (req, res) => {
         console.error("❌ Session save error:", err);
         return res.status(500).json({ message: "Login failed" });
       }
+
       console.log("✅ Session created:", req.session);
+
+      // Explicitly set cookie (helps in some setups)
+      res.cookie("connect.sid", req.sessionID, {
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: isProduction ? "none" : "lax",
+        maxAge: 24 * 60 * 60 * 1000,
+      });
+
       res.json({ message: "Login successful", userId: user.id });
     });
   } catch (err) {
@@ -167,6 +177,7 @@ app.post("/newproducts", async (req, res) => {
 
 // ==================== CART ROUTES ====================
 app.post("/cartpost", isAuth, async (req, res) => {
+  console.log("🛒 Session at /cartpost:", req.session);
   const { productId, quantity } = req.body;
   try {
     const cartItem = await prisma.cart.create({
@@ -181,6 +192,7 @@ app.post("/cartpost", isAuth, async (req, res) => {
 });
 
 app.get("/cart", isAuth, async (req, res) => {
+  console.log("🛒 Session at /cart:", req.session);
   try {
     const cart = await prisma.cart.findMany({
       where: { userId: req.session.userId },
@@ -194,6 +206,7 @@ app.get("/cart", isAuth, async (req, res) => {
 });
 
 app.delete("/cart/:id", isAuth, async (req, res) => {
+  console.log("🛒 Session at DELETE /cart:", req.session);
   const cartId = parseInt(req.params.id, 10);
   try {
     const cartItem = await prisma.cart.findUnique({ where: { id: cartId } });
@@ -206,40 +219,6 @@ app.delete("/cart/:id", isAuth, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Server error" });
-  }
-});
-
-// ==================== SEND CART EMAIL ====================
-app.post("/cart/send-email", isAuth, async (req, res) => {
-  try {
-    const cartItems = await prisma.cart.findMany({
-      where: { userId: req.session.userId },
-      include: { product: true },
-    });
-
-    if (cartItems.length === 0) {
-      return res.status(400).json({ error: "Cart is empty" });
-    }
-
-    const user = await prisma.userDetails.findUnique({
-      where: { id: req.session.userId },
-    });
-
-    const productList = cartItems
-      .map((item) => `- ${item.product.title} (${item.quantity})`)
-      .join("\n");
-
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: user.email,
-      subject: "Your Cart Order",
-      text: `Hello ${user.name},\n\nYour cart contains:\n${productList}\n\nThank you!`,
-    });
-
-    res.json({ message: "Cart email sent" });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Failed to send email" });
   }
 });
 
