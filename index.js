@@ -19,8 +19,6 @@ const corsOptions = {
   methods: ["GET", "POST", "PUT", "DELETE"],
   credentials: true,
 };
-app.use(cors(corsOptions));
-
 // ✅ Preflight
 app.options("*", cors(corsOptions));
 app.use(express.json());
