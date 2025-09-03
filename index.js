@@ -14,48 +14,48 @@ const isProduction = process.env.NODE_ENV === "production";
 app.use(cors({
   origin: ["http://localhost:5173", "https://try-1fe.vercel.app"],
   methods: ["GET", "POST", "PUT", "DELETE"],
-  credentials: true
+  credentials: true,
 }));
 app.use(express.json());
+
+// ✅ Session middleware must be before routes
 app.use(session({
   secret: process.env.SESSION_SECRET || "supersecretkey",
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: process.env.NODE_ENV === "production", // ✅ true only on HTTPS
+    secure: isProduction,        // ✅ true only on HTTPS
     httpOnly: true,
-    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax", // ✅ adjust for dev
-    maxAge: 24 * 60 * 60 * 1000
-  }
+    sameSite: isProduction ? "none" : "lax", // ✅ for cross-site cookies
+    maxAge: 24 * 60 * 60 * 1000, // 1 day
+  },
 }));
-
-
-
 
 // ==================== USER ROUTES ====================
 app.post("/newuser", async (req, res) => {
   try {
-    let { username, password, name, email, phoneNumber } = req.body;
+    const { username, password, name, email, phoneNumber } = req.body;
 
     if (!username || !password || !email || !phoneNumber) {
       return res.status(400).json({ error: "All fields are required" });
     }
 
     const existingUser = await prisma.userDetails.findFirst({
-      where: { OR: [{ username }, { email }, { phoneNumber }] }
+      where: { OR: [{ username }, { email }, { phoneNumber }] },
     });
 
     if (existingUser) {
-      const conflictField = existingUser.username === username
-        ? "Username"
-        : existingUser.email === email
-        ? "Email"
-        : "Phone number";
+      const conflictField =
+        existingUser.username === username
+          ? "Username"
+          : existingUser.email === email
+          ? "Email"
+          : "Phone number";
       return res.status(400).json({ error: `${conflictField} already exists` });
     }
 
     const newUser = await prisma.userDetails.create({
-      data: { username, password, name, email, phoneNumber }
+      data: { username, password, name, email, phoneNumber },
     });
 
     res.status(201).json({ message: "User created successfully", user: newUser });
@@ -68,16 +68,27 @@ app.post("/newuser", async (req, res) => {
 app.post("/login", async (req, res) => {
   try {
     const { username, password } = req.body;
-    if (!username || !password) return res.status(400).json({ message: "Username & password required" });
+    if (!username || !password) {
+      return res.status(400).json({ message: "Username & password required" });
+    }
 
     const user = await prisma.userDetails.findUnique({ where: { username } });
     if (!user) return res.status(401).json({ message: "Invalid username" });
-    req.session.userId = user.id;
-  await req.session.save();
-    if (password !== user.password) return res.status(401).json({ message: "Invalid password" });
 
+    if (password !== user.password) {
+      return res.status(401).json({ message: "Invalid password" });
+    }
+
+    // ✅ Save session only after password check
     req.session.userId = user.id;
-    res.json({ message: "Login successful", userId: user.id });
+    req.session.save((err) => {
+      if (err) {
+        console.error("❌ Session save error:", err);
+        return res.status(500).json({ message: "Login failed" });
+      }
+      console.log("✅ Session created:", req.session);
+      res.json({ message: "Login successful", userId: user.id });
+    });
   } catch (err) {
     console.error("❌ Login error:", err);
     res.status(500).json({ message: "Server error" });
@@ -85,9 +96,14 @@ app.post("/login", async (req, res) => {
 });
 
 app.post("/logout", (req, res) => {
-  req.session.destroy(err => {
+  req.session.destroy((err) => {
     if (err) return res.status(500).json({ message: "Logout failed" });
-    res.clearCookie("connect.sid", { path: "/", sameSite: "none", secure: isProduction });
+
+    res.clearCookie("connect.sid", {
+      path: "/",
+      sameSite: isProduction ? "none" : "lax",
+      secure: isProduction,
+    });
     res.json({ message: "Logged out successfully" });
   });
 });
@@ -117,7 +133,9 @@ app.get("/products/:category", async (req, res) => {
 app.post("/newproducts", async (req, res) => {
   try {
     const { data } = req.body;
-    if (!data || !Array.isArray(data)) return res.status(400).json({ error: "Data must be an array" });
+    if (!data || !Array.isArray(data)) {
+      return res.status(400).json({ error: "Data must be an array" });
+    }
 
     const created = await prisma.product.createMany({ data, skipDuplicates: true });
     res.json({ message: "Products created", count: created.count });
@@ -135,7 +153,7 @@ app.post("/cartpost", async (req, res) => {
   try {
     const cartItem = await prisma.cart.create({
       data: { productId, quantity, userId: req.session.userId },
-      include: { product: true }
+      include: { product: true },
     });
     res.json(cartItem);
   } catch (err) {
@@ -150,7 +168,7 @@ app.get("/cart", async (req, res) => {
   try {
     const cart = await prisma.cart.findMany({
       where: { userId: req.session.userId },
-      include: { product: true }
+      include: { product: true },
     });
     res.json(cart);
   } catch (err) {
@@ -165,7 +183,9 @@ app.delete("/cart/:id", async (req, res) => {
   const cartId = parseInt(req.params.id, 10);
   try {
     const cartItem = await prisma.cart.findUnique({ where: { id: cartId } });
-    if (!cartItem || cartItem.userId !== req.session.userId) return res.status(404).json({ error: "Cart item not found" });
+    if (!cartItem || cartItem.userId !== req.session.userId) {
+      return res.status(404).json({ error: "Cart item not found" });
+    }
 
     await prisma.cart.delete({ where: { id: cartId } });
     res.json({ message: "Cart item deleted successfully" });
@@ -182,20 +202,26 @@ app.post("/cart/send-email", async (req, res) => {
   try {
     const cartItems = await prisma.cart.findMany({
       where: { userId: req.session.userId },
-      include: { product: true }
+      include: { product: true },
     });
 
-    if (cartItems.length === 0) return res.status(400).json({ error: "Cart is empty" });
+    if (cartItems.length === 0) {
+      return res.status(400).json({ error: "Cart is empty" });
+    }
 
-    const user = await prisma.userDetails.findUnique({ where: { id: req.session.userId } });
+    const user = await prisma.userDetails.findUnique({
+      where: { id: req.session.userId },
+    });
 
-    const productList = cartItems.map(item => `- ${item.product.title} (${item.quantity})`).join("\n");
+    const productList = cartItems
+      .map((item) => `- ${item.product.title} (${item.quantity})`)
+      .join("\n");
 
     await transporter.sendMail({
       from: process.env.EMAIL_USER,
       to: user.email,
       subject: "Your Cart Order",
-      text: `Hello ${user.name},\n\nYour cart contains:\n${productList}\n\nThank you!`
+      text: `Hello ${user.name},\n\nYour cart contains:\n${productList}\n\nThank you!`,
     });
 
     res.json({ message: "Cart email sent" });
