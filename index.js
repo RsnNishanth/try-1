@@ -12,10 +12,11 @@ const isProduction = process.env.NODE_ENV === "production";
 
 // ---------- MIDDLEWARE ----------
 app.use(cors({
-  origin: ["http://localhost:5173"], // your local frontend
+  origin: "https://try-1fe.vercel.app", // your deployed frontend
   methods: ["GET", "POST", "PUT", "DELETE"],
-  credentials: true // ✅ allow cookies
+  credentials: true
 }));
+
 
 
 app.use(express.json());
@@ -28,12 +29,13 @@ app.use(session({
   resave: false,
   saveUninitialized: true,
   cookie: {
-    secure: isProduction,      // ✅ true on Render, false locally
-    sameSite: isProduction ? "none" : "lax", // ✅ cross-origin allowed on Render
+    secure: true,      // ✅ HTTPS on Vercel + Render
+    sameSite: "none",  // ✅ cross-origin cookies
     httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000,
+    maxAge: 24 * 60 * 60 * 1000 // 1 day
   }
 }));
+
 
 
 
