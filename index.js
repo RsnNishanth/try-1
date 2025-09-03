@@ -276,12 +276,18 @@ app.post("/cart/send-email", isAuth, async (req, res) => {
     await transporter.sendMail(customerMail);
     await transporter.sendMail(adminMail);
 
-    res.json({ message: "Order email sent successfully" });
+    // ✅ Empty the cart after successful email
+    await prisma.cart.deleteMany({
+      where: { userId: req.session.userId },
+    });
+
+    res.json({ message: "Order email sent successfully and cart cleared" });
   } catch (err) {
     console.error("❌ Email sending failed:", err);
     res.status(500).json({ error: "Failed to send email" });
   }
 });
+
 
 
 
