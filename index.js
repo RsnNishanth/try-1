@@ -25,12 +25,13 @@ app.use(session({
   resave: false,
   saveUninitialized: true,
   cookie: {
-    secure: isProduction,               // ✅ HTTPS only in production
-    sameSite: isProduction ? "none" : "lax",
+    secure: true,      // ✅ must be true for HTTPS
+    sameSite: "none",  // ✅ cross-origin cookies
     httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000 // 1 day
+    maxAge: 24 * 60 * 60 * 1000
   }
 }));
+
 
 // ==================== USER ROUTES ====================
 app.post("/newuser", async (req, res) => {
