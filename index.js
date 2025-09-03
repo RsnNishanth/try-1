@@ -14,19 +14,20 @@ const isProduction = process.env.NODE_ENV === "production";
 app.use(cors({
   origin: ["http://localhost:5173", "https://try-1fe.vercel.app"],
   methods: ["GET", "POST", "PUT", "DELETE"],
-  credentials: true,
+  credentials: true, // ✅ allow cookies
 }));
 app.use(express.json());
 
 // ✅ Session middleware must be before routes
 app.use(session({
+  name: "connect.sid", // ✅ standard cookie name
   secret: process.env.SESSION_SECRET || "supersecretkey",
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: isProduction,        // ✅ true only on HTTPS
+    secure: isProduction,        // ✅ true only when deployed on HTTPS
     httpOnly: true,
-    sameSite: isProduction ? "none" : "lax", // ✅ for cross-site cookies
+    sameSite: isProduction ? "none" : "lax", // ✅ cross-site cookie support
     maxAge: 24 * 60 * 60 * 1000, // 1 day
   },
 }));
@@ -81,12 +82,23 @@ app.post("/login", async (req, res) => {
 
     // ✅ Save session only after password check
     req.session.userId = user.id;
+
     req.session.save((err) => {
       if (err) {
         console.error("❌ Session save error:", err);
         return res.status(500).json({ message: "Login failed" });
       }
+
       console.log("✅ Session created:", req.session);
+
+      // ✅ explicitly send cookie (important for Render + Vercel combo)
+      res.cookie("connect.sid", req.sessionID, {
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: isProduction ? "none" : "lax",
+        maxAge: 24 * 60 * 60 * 1000,
+      });
+
       res.json({ message: "Login successful", userId: user.id });
     });
   } catch (err) {
