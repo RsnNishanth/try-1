@@ -12,26 +12,20 @@ const isProduction = process.env.NODE_ENV === "production";
 
 // ---------- MIDDLEWARE ----------
 app.use(cors({
-  origin: "https://try-1fe.vercel.app", // your deployed frontend
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  origin: ["http://localhost:5173", "https://try-1fe.vercel.app"],
+  methods: ["GET", "POST", "PUT", "DELETE"],
   credentials: true
 }));
-
-
 app.use(express.json());
-
-// ---------- SESSION ----------
-
-
 app.use(session({
   secret: process.env.SESSION_SECRET || "supersecretkey",
   resave: false,
-  saveUninitialized: true,
+  saveUninitialized: false,
   cookie: {
-    secure: true,      // ✅ HTTPS on Vercel + Render
-    sameSite: "none",  // ✅ cross-origin cookies
+    secure: process.env.NODE_ENV === "production", // ✅ true only on HTTPS
     httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000 // 1 day
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax", // ✅ adjust for dev
+    maxAge: 24 * 60 * 60 * 1000
   }
 }));
 
