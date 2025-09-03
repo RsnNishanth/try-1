@@ -72,6 +72,8 @@ app.post("/login", async (req, res) => {
 
     const user = await prisma.userDetails.findUnique({ where: { username } });
     if (!user) return res.status(401).json({ message: "Invalid username" });
+    req.session.userId = user.id;
+  await req.session.save();
     if (password !== user.password) return res.status(401).json({ message: "Invalid password" });
 
     req.session.userId = user.id;
