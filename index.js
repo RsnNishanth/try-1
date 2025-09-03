@@ -21,8 +21,8 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 
-// ✅ Handle CORS preflight explicitly (important on Render)
-app.options("*", cors(corsOptions));
+// ✅ Handle CORS preflight explicitly (Express v5 safe)
+app.options("/*", cors(corsOptions));
 
 app.use(express.json());
 
