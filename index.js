@@ -13,10 +13,9 @@ const isProduction = process.env.NODE_ENV === "production";
 // ---------- MIDDLEWARE ----------
 app.use(cors({
   origin: "https://try-1fe.vercel.app", // your deployed frontend
-  methods: ["GET", "POST", "PUT", "DELETE"],
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   credentials: true
 }));
-
 
 
 app.use(express.json());
