@@ -248,7 +248,7 @@ app.post("/cart/send-email", isAuth, async (req, res) => {
     const cartSummary = cartItems
       .map(
         (item) =>
-          `${item.product.name} x ${item.quantity} = ₹${item.product.price * item.quantity}`
+          `${item.product.title} x ${item.quantity} = ₹${item.product.price * item.quantity}`
       )
       .join("\n");
 
