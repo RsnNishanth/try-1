@@ -221,6 +221,55 @@ app.delete("/cart/:id", isAuth, async (req, res) => {
   }
 });
 
+
+// ==================== CART ORDER MAIL ====================
+app.post("/cart/send-email", isAuth, async (req, res) => {
+  try {
+    // Fetch the user details
+    const user = await prisma.userDetails.findUnique({
+      where: { id: req.session.userId },
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    // Fetch the user’s cart
+    const cartItems = await prisma.cart.findMany({
+      where: { userId: req.session.userId },
+      include: { product: true },
+    });
+
+    if (!cartItems.length) {
+      return res.status(400).json({ error: "Cart is empty" });
+    }
+
+    // Build email content
+    const cartSummary = cartItems
+      .map(
+        (item) =>
+          `${item.product.name} x ${item.quantity} = ₹${item.product.price * item.quantity}`
+      )
+      .join("\n");
+
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: user.email, // send to customer
+      subject: "🛒 Order Confirmation",
+      text: `Hello ${user.name},\n\nThank you for your order!\n\nYour cart:\n${cartSummary}\n\nWe will contact you soon.`,
+    };
+
+    // Send email
+    await transporter.sendMail(mailOptions);
+
+    res.json({ message: "Order email sent successfully" });
+  } catch (err) {
+    console.error("❌ Email sending failed:", err);
+    res.status(500).json({ error: "Failed to send email" });
+  }
+});
+
+
 // ==================== START SERVER ====================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
